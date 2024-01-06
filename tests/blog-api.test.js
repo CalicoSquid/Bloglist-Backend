@@ -1,28 +1,45 @@
 const mongoose = require("mongoose");
 const supertest = require("supertest");
 const app = require("../app");
-
+const jwt = require("jsonwebtoken");
 const api = supertest(app);
 
 const Blog = require("../models/blog");
 const helper = require("./test-helper");
 const blogList = helper.blogs;
 
+let authToken;
+
+beforeAll(async () => {
+  authToken = await helper.loginUser(api, {
+    username: "test-user",
+    password: "test-password",
+  });
+});
+
 beforeEach(async () => {
   await Blog.deleteMany({});
+
+  const users = await helper.getAllUsers();
+  
+  const user = users[0].id
   for (let blog of blogList) {
-    const newBlog = new Blog(blog);
+    const newBlog = new Blog({ ...blog, user });
     await newBlog.save();
   }
 });
 
+
 describe("Tests to check properties and actions of current blogs in database", () => {
   test("GET returns correct number of blogs", async () => {
-    const listOfAllBlogs = await api
+    const listOfBlogsBefore = await helper.getAllBlogs();
+
+    const blogs = await api
       .get("/api/blogs")
       .expect(200)
       .expect("Content-Type", /application\/json/);
-    expect(listOfAllBlogs.body.length).toEqual(blogList.length);
+
+    expect(blogs.body.length).toEqual(listOfBlogsBefore.length);
   });
 
   test("Database ID property is correctly named 'id'", async () => {
@@ -37,8 +54,11 @@ describe("Tests to check properties and actions of current blogs in database", (
   test("Check if DELETE removes item from database", async () => {
     const listOfAllBlogs = await helper.getAllBlogs();
     const blogToDelete = listOfAllBlogs[0].id;
-
-    await api.delete(`/api/blogs/${blogToDelete}`).expect(204);
+    
+    await api
+      .delete(`/api/blogs/${blogToDelete}`)
+      .set("authorization", authToken)
+      .expect(204);
 
     const listOfAllBlogsAfter = await helper.getAllBlogs();
     expect(listOfAllBlogsAfter.length).toEqual(listOfAllBlogs.length - 1);
@@ -57,41 +77,56 @@ describe("Tests to check properties and actions of current blogs in database", (
 
     const updatedBlog = await api
       .put(`/api/blogs/${blogToUpdate.id}`)
+      .set("authorization", authToken)
       .send({ ...newBlog, ...{ new: true } })
       .expect(201);
 
-    expect(updatedBlog.body).toEqual(newBlog);
+    expect(updatedBlog.body.likes).toEqual(newBlog.likes);
   });
 });
 
 describe("Tests to correctly add blog posts to database", () => {
   test("Adding a blog post works correctly", async () => {
     const listOfAllBlogs = await helper.getAllBlogs();
+
     const blogToAdd = {
       title: "Squids Kids",
       author: "Squidward",
       url: "http://kitten-mittens.cat",
       likes: 1000000,
+      user: listOfAllBlogs[0].id,
     };
 
-    await api.post("/api/blogs").send(blogToAdd).expect(201);
+    await api
+      .post("/api/blogs")
+      .set("authorization", authToken)
+      .send(blogToAdd)
+      .expect(201);
 
     const listOfAllBlogsAfter = await helper.getAllBlogs();
+
     const addedBlog = listOfAllBlogsAfter.find(
       (blog) => blog.title === blogToAdd.title
     );
     expect(addedBlog).toBeDefined();
-    expect(listOfAllBlogsAfter.length).toEqual(listOfAllBlogs.length + 1);
+    expect(listOfAllBlogsAfter).toHaveLength(listOfAllBlogs.length + 1);
   });
 
   test("Missing likes property defaults to 0", async () => {
+    const listOfAllBlogs = await helper.getAllBlogs();
+
     const blogToAdd = {
       title: "Missing Likes Property",
       author: "Test Author",
       url: "http://test-url.com",
+      user: listOfAllBlogs[0].id,
     };
 
-    const response = await api.post("/api/blogs").send(blogToAdd).expect(201);
+    const response = await api
+      .post("/api/blogs")
+      .set("authorization", authToken)
+      .send(blogToAdd)
+      .expect(201);
 
     expect(response.body.likes).toBeDefined();
     expect(response.body.likes).toBe(0);
