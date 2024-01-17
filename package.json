@@ -27,7 +27,8 @@
     "deploy": "fly deploy",
     "deploy:full": "npm run build:ui && npm run deploy",
     "logs:prod": "fly logs",
-    "test": "cross-env NODE_ENV=test jest --verbose --runInBand"
+    "test": "cross-env NODE_ENV=test jest --verbose --runInBand",
+    "start:test": "set NODE_ENV=test&&nodemon index.js"
   },
   "author": "CalicoSquid",
   "license": "ISC",

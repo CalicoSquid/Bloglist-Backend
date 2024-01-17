@@ -23,7 +23,7 @@ router.post("/", async (req, res) => {
   const user = req.user;
 
   if (!title || !author) {
-    return res.status(400).send("Title and author are required.");
+    return res.status(400).send({error: "Title and author are required."});
   }
 
   if (!token) {
@@ -53,6 +53,10 @@ router.delete("/:id", async (req, res) => {
   }
 
   const blogToDelete = await Blog.findById(id);
+
+  if(!blogToDelete.user) {
+  return res.status(401).json({ error: "Cannot delete blog" }).end();
+  }
 
   if (blogToDelete.user.toString() != user.id.toString()) {
     return res
